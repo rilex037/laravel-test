@@ -1,0 +1,13 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["resources/ts/**/*", "resources/ts/**/*.vue"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["resources/ts/*"]
+    },
+    "types": ["vite/client"],
+    "verbatimModuleSyntax": true
+  }
+}

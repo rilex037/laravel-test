@@ -3,5 +3,6 @@
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    $initialCount = 42;
+    return view('welcome', ['initialCount' => $initialCount]);
 });
