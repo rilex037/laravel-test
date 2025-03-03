@@ -2,26 +2,14 @@
 import type { Client } from '@/types/Client';
 import { computed, ref } from 'vue';
 import Pagination from '@/components/elements/Pagiantion.vue';
+import { parseJsonData } from '@/utils/jsonParser';
 
 const props = defineProps<{
   clientsData: string;
   csrfToken: string;
 }>();
 
-const clients = computed(() => parseClientsData(props.clientsData));
-
-const parseClientsData = (data: string): Client[] => {
-  try {
-    const parsed = JSON.parse(data);
-    if (!Array.isArray(parsed)) {
-      throw new Error('Clients data must be an array');
-    }
-    return parsed;
-  } catch (error) {
-    console.error('Error parsing clients data:', error);
-    return [];
-  }
-};
+const clients = computed(() => parseJsonData<Client[]>(props.clientsData));
 
 // Pagination logic
 const itemsPerPage = 10;
@@ -67,7 +55,6 @@ const handlePageChange = (page: number) => {
     </div>
 
     <div v-else>
-      <!-- Card layout directly in the component -->
       <div class="grid grid-cols-1 gap-4">
         <div
           v-for="client in paginatedClients"
@@ -129,7 +116,6 @@ const handlePageChange = (page: number) => {
         </div>
       </div>
 
-      <!-- Using the separate pagination component -->
       <div class="mt-6">
         <Pagination
           :current-page="currentPage"

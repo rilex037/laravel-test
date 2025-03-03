@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-
+use App\Http\Controllers\ClientController;
 
 Route::get('/test', function () {
     return view('test');
@@ -17,12 +17,18 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Protected Routes
 Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
 
-    Route::get('/clients', [App\Http\Controllers\ClientController::class, 'index'])->name('clients.index');
-    Route::get('/clients/create', [App\Http\Controllers\ClientController::class, 'create'])->name('clients.create');
-    Route::get('/clients/{client}/edit', [App\Http\Controllers\ClientController::class, 'edit'])->name('clients.edit');
-    Route::delete('/clients/{client}', [App\Http\Controllers\ClientController::class, 'destroy'])->name('clients.destroy');
+    // Dashboard Home
+    Route::get('/dashboard', fn() => view('dashboard'))->name('dashboard');
+
+    // Clients Routes
+    Route::prefix('clients')->name('clients.')->group(function () {
+        Route::get('/', [ClientController::class, 'index'])->name('index');
+        Route::get('/create', [ClientController::class, 'create'])->name('create');
+        Route::post('/', [ClientController::class, 'store'])->name('store');
+        Route::get('/{client}/edit', [ClientController::class, 'edit'])->name('edit');
+        Route::put('/{client}', [ClientController::class, 'update'])->name('update');
+        Route::get('/{client}/delete', [ClientController::class, 'delete'])->name('delete');
+        Route::delete('/{client}', [ClientController::class, 'destroy'])->name('destroy');
+    });
 });
