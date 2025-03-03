@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use Exception;
 
 class ClientController extends Controller
 {
@@ -56,16 +57,13 @@ class ClientController extends Controller
             'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:255',
             'cash_loan_amount' => 'nullable|numeric|min:0',
-            'property_value' => 'nullable|numeric|min:0',
-            'down_payment_amount' => 'nullable|numeric|min:0',
+            'property_value' => 'nullable|numeric|min:0|required_with:down_payment_amount',
+            'down_payment_amount' => 'nullable|numeric|min:0|required_with:property_value',
             '_token' => 'required',
         ]);
 
-        if ($this->validateContactFields($request)) {
-            return redirect()
-                ->back()
-                ->withErrors(['contact' => 'Either an email or phone number is required.'])
-                ->withInput();
+        if (empty($validated['email']) && empty($validated['phone'])) {
+            return redirect()->back()->withErrors(['contact' => 'Either email or phone is required.'])->withInput();
         }
 
         $client = Client::create([
@@ -75,7 +73,11 @@ class ClientController extends Controller
             'phone' => $validated['phone'],
         ]);
 
-        $this->loanService->handleLoans($client, $validated, Auth::id());
+        try {
+            $this->loanService->handleLoans($client, $validated, Auth::id());
+        } catch (Exception $e) {
+            return redirect()->back()->withErrors(['loan' => $e->getMessage()])->withInput();
+        }
 
         return redirect()->route('clients.index')->with('success', 'Client created successfully');
     }
@@ -108,26 +110,27 @@ class ClientController extends Controller
             'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:255',
             'cash_loan_amount' => 'nullable|numeric|min:0',
-            'property_value' => 'nullable|numeric|min:0',
-            'down_payment_amount' => 'nullable|numeric|min:0',
+            'property_value' => 'nullable|numeric|min:0|required_with:down_payment_amount',
+            'down_payment_amount' => 'nullable|numeric|min:0|required_with:property_value',
             '_token' => 'required',
         ]);
 
-        if ($this->validateContactFields($request)) {
-            return redirect()
-                ->back()
-                ->withErrors(['contact' => 'Either an email or phone number is required.'])
-                ->withInput();
+        if (empty($validated['email']) && empty($validated['phone'])) {
+            return redirect()->back()->withErrors(['contact' => 'Either email or phone is required.'])->withInput();
         }
 
-        $client->update([
-            'first_name' => $validated['first_name'],
-            'last_name' => $validated['last_name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'],
-        ]);
+        try {
+            $client->update([
+                'first_name' => $validated['first_name'],
+                'last_name' => $validated['last_name'],
+                'email' => $validated['email'],
+                'phone' => $validated['phone'],
+            ]);
 
-        $this->loanService->handleLoans($client, $validated, Auth::id());
+            $this->loanService->handleLoans($client, $validated, Auth::id());
+        } catch (Exception $e) {
+            return redirect()->back()->withErrors(['loan' => $e->getMessage()])->withInput();
+        }
 
         return redirect()->route('clients.index')->with('success', 'Client updated successfully');
     }
@@ -140,12 +143,6 @@ class ClientController extends Controller
     public function destroy(Request $request, Client $client): RedirectResponse
     {
         $client->delete();
-
         return redirect()->route('clients.index')->with('success', 'Client deleted successfully');
-    }
-
-    private function validateContactFields(Request $request): bool
-    {
-        return empty($request->email) && empty($request->phone);
     }
 }
