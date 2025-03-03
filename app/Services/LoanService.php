@@ -1,38 +1,40 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Services;
 
 use App\Models\CashLoan;
 use App\Models\Client;
 use App\Models\HomeLoan;
-use Exception;
+use Illuminate\Support\Facades\Auth;
 
 class LoanService
 {
-    public function handleLoans(Client $client, array $data, int $adviserId): void
+    public function handleLoans(Client $client, array $data): void
     {
+        $adviserId = Auth::id();
+
         if (isset($data['cash_loan_amount'])) {
-            $this->handleCashLoan($client, $data['cash_loan_amount'], $adviserId);
+            $this->handleCashLoan($client, (int) $data['cash_loan_amount'], $adviserId);
         }
 
         if (isset($data['property_value']) && isset($data['down_payment_amount'])) {
-            $this->handleHomeLoan($client, $data['property_value'], $data['down_payment_amount'], $adviserId);
+            $this->handleHomeLoan($client, (int) $data['property_value'], (int) $data['down_payment_amount'], $adviserId);
         }
     }
 
-    private function handleCashLoan(Client $client, $amount, int $adviserId): void
+    protected function handleCashLoan(Client $client, int $amount, int $adviserId): void
     {
-        $amount = (int)$amount;
-        $existing = $client->cashLoan;
+        if ($amount <= 0) {
+            return;
+        }
 
-        if ($amount <= 0 || ($existing && $amount === $existing->loan_amount)) {
+        $existing = $client->cashLoan;
+        if ($existing && $existing->loan_amount === $amount) {
             return;
         }
 
         if ($existing && $existing->adviser_id !== $adviserId) {
-            throw new Exception('Cannot update a cash loan assigned to another adviser.');
+            throw new \Exception(__('loans.cash_loan_adviser_mismatch'));
         }
 
         CashLoan::updateOrCreate(
@@ -41,21 +43,19 @@ class LoanService
         );
     }
 
-    private function handleHomeLoan(Client $client, $propertyValue, $downPayment, int $adviserId): void
+    protected function handleHomeLoan(Client $client, int $propertyValue, int $downPayment, int $adviserId): void
     {
-        $propertyValue = (int)$propertyValue;
-        $downPayment = (int)$downPayment;
-        $existing = $client->homeLoan;
+        if ($propertyValue <= 0 || $downPayment <= 0) {
+            return;
+        }
 
-        if (
-            $propertyValue <= 0 || $downPayment <= 0 ||
-            ($existing && $propertyValue === $existing->property_value && $downPayment === $existing->down_payment_amount)
-        ) {
+        $existing = $client->homeLoan;
+        if ($existing && $existing->property_value === $propertyValue && $existing->down_payment_amount === $downPayment) {
             return;
         }
 
         if ($existing && $existing->adviser_id !== $adviserId) {
-            throw new Exception('Cannot update a home loan assigned to another adviser.');
+            throw new \Exception(__('loans.home_loan_adviser_mismatch'));
         }
 
         HomeLoan::updateOrCreate(

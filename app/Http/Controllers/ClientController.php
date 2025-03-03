@@ -1,42 +1,28 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreClientRequest;
+use App\Http\Requests\UpdateClientRequest;
+use App\Http\Resources\ClientResource;
 use App\Models\Client;
 use App\Services\LoanService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use Exception;
 
 class ClientController extends Controller
 {
-    private LoanService $loanService;
-
-    public function __construct(LoanService $loanService)
+    public function __construct(protected LoanService $loanService)
     {
-        $this->loanService = $loanService;
+        $this->authorizeResource(Client::class, 'client');
     }
 
     public function index(): View
     {
-        $clients = Client::with(['cashLoan', 'homeLoan'])
-            ->get()
-            ->map(fn(Client $client): array => [
-                'id' => $client->id,
-                'first_name' => $client->first_name,
-                'last_name' => $client->last_name,
-                'email' => $client->email,
-                'phone' => $client->phone,
-                'has_cash_loan' => !is_null($client->cashLoan),
-                'has_home_loan' => !is_null($client->homeLoan),
-            ])
-            ->all();
-
-        return view('clients.index', ['clients' => $clients]);
+        $clients = Client::with(['cashLoan', 'homeLoan'])->get();
+        return view('clients.index', ['clients' => ClientResource::collection($clients)]);
     }
 
     public function create(): View
@@ -45,94 +31,44 @@ class ClientController extends Controller
             'action' => route('clients.store'),
             'method' => 'POST',
             'client' => null,
-            'adviser_id' => Auth::id(),
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreClientRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|max:255',
-            'cash_loan_amount' => 'nullable|numeric|min:0',
-            'property_value' => 'nullable|numeric|min:0|required_with:down_payment_amount',
-            'down_payment_amount' => 'nullable|numeric|min:0|required_with:property_value',
-            '_token' => 'required',
-        ]);
-
-        if (empty($validated['email']) && empty($validated['phone'])) {
-            return redirect()->back()->withErrors(['contact' => 'Either email or phone is required.'])->withInput();
-        }
-
-        $client = Client::create([
-            'first_name' => $validated['first_name'],
-            'last_name' => $validated['last_name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'],
-        ]);
-
         try {
-            $this->loanService->handleLoans($client, $validated, Auth::id());
-        } catch (Exception $e) {
-            return redirect()->back()->withErrors(['loan' => $e->getMessage()])->withInput();
-        }
+            $client = Client::create($request->validatedClientData());
+            $this->loanService->handleLoans($client, $request->validatedLoanData());
 
-        return redirect()->route('clients.index')->with('success', 'Client created successfully');
+            return redirect()->route('clients.index')
+                ->with('success', __('clients.created'));
+        } catch (\Exception $e) {
+            Log::error('Failed to create client: ' . $e->getMessage(), ['exception' => $e]);
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+        }
     }
 
     public function edit(Client $client): View
     {
-        $cashLoan = $client->cashLoan;
-        $homeLoan = $client->homeLoan;
-
         return view('clients.form', [
             'action' => route('clients.update', $client),
             'method' => 'PUT',
-            'client' => array_merge(
-                $client->toArray(),
-                [
-                    'cash_loan_amount' => $cashLoan?->loan_amount,
-                    'property_value' => $homeLoan?->property_value,
-                    'down_payment_amount' => $homeLoan?->down_payment_amount,
-                ]
-            ),
-            'adviser_id' => Auth::id(),
+            'client' => new ClientResource($client),
         ]);
     }
 
-    public function update(Request $request, Client $client): RedirectResponse
+    public function update(UpdateClientRequest $request, Client $client): RedirectResponse
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|max:255',
-            'cash_loan_amount' => 'nullable|numeric|min:0',
-            'property_value' => 'nullable|numeric|min:0|required_with:down_payment_amount',
-            'down_payment_amount' => 'nullable|numeric|min:0|required_with:property_value',
-            '_token' => 'required',
-        ]);
-
-        if (empty($validated['email']) && empty($validated['phone'])) {
-            return redirect()->back()->withErrors(['contact' => 'Either email or phone is required.'])->withInput();
-        }
-
         try {
-            $client->update([
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'],
-                'email' => $validated['email'],
-                'phone' => $validated['phone'],
-            ]);
+            $client->update($request->validatedClientData());
+            $this->loanService->handleLoans($client, $request->validatedLoanData());
 
-            $this->loanService->handleLoans($client, $validated, Auth::id());
-        } catch (Exception $e) {
-            return redirect()->back()->withErrors(['loan' => $e->getMessage()])->withInput();
+            return redirect()->route('clients.index')
+                ->with('success', __('clients.updated'));
+        } catch (\Exception $e) {
+            Log::error('Failed to update client: ' . $e->getMessage(), ['exception' => $e]);
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
         }
-
-        return redirect()->route('clients.index')->with('success', 'Client updated successfully');
     }
 
     public function delete(Client $client): View
@@ -140,9 +76,15 @@ class ClientController extends Controller
         return view('clients.delete', compact('client'));
     }
 
-    public function destroy(Request $request, Client $client): RedirectResponse
+    public function destroy(Client $client): RedirectResponse
     {
-        $client->delete();
-        return redirect()->route('clients.index')->with('success', 'Client deleted successfully');
+        try {
+            $client->delete();
+            return redirect()->route('clients.index')
+                ->with('success', __('clients.deleted'));
+        } catch (\Exception $e) {
+            Log::error('Failed to delete client: ' . $e->getMessage(), ['exception' => $e]);
+            return back()->withErrors(['error' => __('clients.delete_failed')]);
+        }
     }
 }
