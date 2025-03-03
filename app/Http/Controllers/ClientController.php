@@ -21,7 +21,7 @@ class ClientController extends Controller
 
     public function index(): View
     {
-        $clients = Client::with(['cashLoan', 'homeLoan'])->get();
+        $clients = Client::with(['cashLoan', 'homeLoan'])->orderBy('created_at', 'desc')->get();
         return view('clients.index', ['clients' => ClientResource::collection($clients)]);
     }
 
