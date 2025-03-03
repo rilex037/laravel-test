@@ -1,7 +1,12 @@
 import { defineCustomElement } from 'vue';
-import CounterComponent from '@/components/CounterComponent.vue';
+import Dashboard from '@/components/Dashboard.vue';
+import ClientsList from '@/components/ClientsList.vue';
 
 customElements.define(
-  'counter-component',
-  defineCustomElement(CounterComponent, { shadowRoot: false })
+  'adviser-dashboard',
+  defineCustomElement(Dashboard, { shadowRoot: false })
+);
+customElements.define(
+  'clients-list',
+  defineCustomElement(ClientsList, { shadowRoot: false })
 );
